@@ -1,0 +1,115 @@
+---
+title: "The magic of purrr"
+output: html_notebook
+---
+
+# Background
+
+This is my following along from this site [here](http://ctlente.com/en/purrr-magic/)
+
+```{r}
+library(purrr)
+
+ghr <- repurrrsive::gh_repos
+length(ghr[[1]])
+length(ghr[[1]][[3]])
+mylist <- list(a = 1:5,
+               b = letters,
+               c = LETTERS)
+# mylist
+# mylist[1]
+# length(mylist[1])
+# length(mylist[[1]])
+# 
+
+```
+
+## One-line loops
+How many repositories does each user have?
+
+```{r}
+lengths <- c()
+for (i in seq_along(ghr)) {
+  lengths <- c(lengths, length(ghr[[i]]))
+}
+lengths
+```
+
+ map() is a loop abstraction, allowing us to iterate over the elements of the list and not some auxiliary variable. In other words it applies a function to every element of a list.
+ 
+ 
+ 
+```{r}
+map(ghr, length)
+```
+
+map() has many sister functions, map_xxx() (map_dbl(), map_chr(), map_lgl(), …), which are able to flatten out the output if you already know what type it’s gonna have. In our case, we want a vector of doubles, so we use map_dbl():
+
+```{r}
+map_dbl(ghr, length)
+```
+
+## Form(ula) and function
+Now that you’ve seen the basic building block of purrr, I’ll introduce you to anonymous functions, another great feature of purrr. These are functions you can define inside a map() without having to give it a name. They come in two flavors: formulas and functions.
+
+Formulas are preceded by a tilde “~” and you can’t control what their arguments are named. Functions on the other hand are, well, regular R functions. First let’s see how formulas work:
+
+```{r}
+map_dbl(ghr, ~length(.x))
+```
+
+If we use the tilde notation, we can explicitly access that element and place it wherever we want inside the function call, but it’s name is going to be .x no matter what.
+```{r}
+map(1:3, ~runif(2, max = .x))
+```
+
+In the example above we have to use the tilde notation because, if we hadn’t, the vector 1:3 would end up being used as the first argument of runif(). And speaking of arguments, map() conveniently allows you to send any fixed arguments you want at the end of the call (note how this time 1:3 is used automatically as the first argument):
+```{r}
+map(1:3, runif, min = 3, max = 6)
+```
+
+And, last but not least, functions. These are very similar to formulas, whereas here you can name arguments however you like (but as a drawback you have to define the function in a very verbose way):
+
+```{r}
+map(1:3, function(n) {runif(n, min = 3, max = 6)})
+```
+
+## Mapping the map
+As you might have already figured out, we can also nest map() calls! This is useful when accessing deeper levels of a list (like when we talked about length(ghr[[1]][[3]])). Let’s try to see how many information fields each repo of each user has:
+```{r, echo=FALSE}
+map(ghr, ~map(.x, length))
+
+map(ghr, ~map_dbl(.x, length))
+```
+
+
+Let’s see if we can find the names of the users in the login field of the $owner list of each repo (note the use of map_chr(); this is the character equivalent of map_dbl()):
+```{r}
+map(ghr, function(user) {
+  map_chr(user, ~.x$owner$login)
+})
+
+map(ghr, function(user) {
+  user %>% map_chr(~.x$owner$login)
+})
+
+map(ghr, ~map_chr(.x, ~.x$owner$login))
+```
+
+But all statements suffer from the repetition problem in their outputs given the fact that we’re doing the same thing for absolutely every repo available. Since we just need this information once for every user, we can employ the good old [1] to get only the first element of the vector returned by map_chr() and then use another map_chr() so we don’t have to deal with weird lists:
+
+```{r}
+map_chr(ghr, ~map_chr(.x, ~.x$owner$login)[1])
+```
+
+## Piping the map
+In the section above we mapped a pipe, now we’ll pipe a map. This is should be very straightforward given the last bit of code, but we’ll use mapping to get the logins of the users, then set_names() to name the user lists according to their logins and finally pluck() the list of repos belonging to “jennybc” (note the dot in set_names(); it stands for the results incoming from the line above, we’re using it as the second argument for the function):
+
+```{r}
+library(rvest)
+ghr %>%
+  map_chr(~map_chr(.x, ~.x$owner$login)[1]) %>%
+  set_names(ghr, .) %>%
+  pluck("jennybc")
+```
+
