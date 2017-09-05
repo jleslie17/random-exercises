@@ -14,3 +14,6 @@ for line in connect:
     domains[domain] = domains.get(domain, 0) + 1
 
 print domains
+
+for line in connect:
+	
